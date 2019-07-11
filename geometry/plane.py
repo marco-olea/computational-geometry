@@ -10,15 +10,14 @@ class Point:
         y: The ordinate.
     """
     
-    def __init__(self, x: float, y: float, canvas_id: int = None):
+    def __init__(self, x: float, y: float):
         """Create a point with the given coordinates."""
         self.x = x
         self.y = y
-        self.canvas_id = canvas_id
     
     def __str__(self):
         """Return (x, y) with this point's abscissa and ordinate."""
-        return (f'{self.canvas_id}: ' if self.canvas_id else '') + f'({self.x}, {self.y})'
+        return f'({self.x}, {self.y})'
     
     def __mul__(self, other):
         """Compute the dot product of this point with another."""
@@ -50,8 +49,6 @@ class Segment:
     
     def __init__(self, p1: Point, p2: Point):
         """Create a segment between the two given points."""
-        if p1 == p2:
-            raise Exception(f'A segment cannot begin and end on the same point; {p1}.')
         self.p1 = p1
         self.p2 = p2
         
@@ -69,11 +66,21 @@ class Segment:
     
     
 class Ray:
+    """A straight line that starts at a certain point and extends infinitely in some direction.
+    
+    Attributes:
+        p: The ray's only endpoint.
+        angle: A float in the range [0, 2pi) that represents the angle (in radians) between the ray
+               and the x-axis.
+    """
+    
     def __init__(self, p: Point, angle: float):
+        """Create a ray with the given parameters."""
         self.p = p
         self.angle = angle
         
     def __str__(self):
+        """Return ((x, y), a)."""
         return f'({self.p}, {self.angle})'
 
     def __eq__(self, other):
@@ -85,6 +92,7 @@ class Ray:
         return hash(self.p) ^ hash(self.angle) ^ hash((self.p, self.angle))
         
     def angle_in_degrees(self) -> float:
+        """Return this ray's angle in degrees."""
         return self.angle * 180 / pi
     
 
@@ -124,8 +132,8 @@ class Triangle:
         t = (self.p3.y - self.p1.y) * d_x + (self.p1.x - self.p3.x) * d_y
         return s < 0 and t < 0 and s + t > d if d < 0 else s > 0 and t > 0 and s + t < d
     
-    def shares_point(self, other) -> bool:
-        """Return True if this triangle contains a point from the given triangle."""
+    def shares_vertex(self, other) -> bool:
+        """Return True if this triangle and the other share a vertex."""
         points = {self.p1, self.p2, self.p3}
         return other.p1 in points or other.p2 in points or other.p3 in points
 
@@ -148,7 +156,7 @@ class Line:
     def from_two_points(cls, p1: Point, p2: Point):
         """Compute the line equation given two distinct points."""
         if p1 == p2:
-            raise Exception(f'Points cannot be equal; {p1}.')
+            raise Exception(f'Non-distinct points were given: p1: {p1}, p2: {p2}.')
         if p1.x == p2.x:
             return cls(1, 0, -p1.x)
         else:
@@ -157,6 +165,7 @@ class Line:
         
     @classmethod
     def from_ray(cls, ray: Ray):
+        """Compute the equation for the line that completely contains the given ray."""
         if ray.angle == pi / 2 or ray.angle == 3 * pi / 2:
             return Line(1, 0, -ray.p.x)
         else:
@@ -164,8 +173,7 @@ class Line:
             return Line(m, -1, ray.p.y - m * ray.p.x)
         
     def orthogonal_line(self, p: Point):
-        if not self.contains(p):
-            return None
+        """Return the line that is perpendicular to this one on a certain point."""
         if self.a == 0:
             return Line(1, 0, -p.x)
         elif self.b == 0:
@@ -223,11 +231,13 @@ class Circle:
         
     @classmethod
     def from_triangle(cls, triangle: Triangle):
-        """Computes the circle circumscribed in the given polygon.
+        """Computes the circle circumscribed in the given triangle.
         
         Reference: https://en.wikipedia.org/wiki/Circumscribed_circle#Cartesian_coordinates
         """
         a, b, c = triangle.p1, triangle.p2, triangle.p3
+        if Line.from_two_points(a, b).contains(c):
+            raise Exception(f'Points {a}, {b}, and {c} are collinear.')
         s = Point(
             0.5 * ((a * a) * (b.y - c.y) - (b * b) * (a.y - c.y) + (c * c) * (a.y - b.y)),
             0.5 * (-(a * a) * (b.x - c.x) + (b * b) * (a.x - c.x) - (c * c) * (a.x - b.x)))

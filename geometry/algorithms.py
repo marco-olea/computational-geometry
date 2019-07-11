@@ -1,50 +1,55 @@
-from math import pi, atan, tan
+from math import pi, atan
 from typing import List, Set, Tuple
 from geometry.plane import Point, Segment, Ray, Triangle, Line, Circle
 
 
-def convex_hull(points: List[Point]) -> List[Point]:
+def convex_hull(points: Set[Point]) -> List[Point]:
     """Compute the convex hull of a list of points in a two-dimensional space.
 
     This function implements the Quickhull algorithm.
     Reference: https://en.wikipedia.org/wiki/Quickhull#Algorithm.
     """
+    n, hull, points_as_list = len(points), [], list(points)
     if len(points) <= 3:
-        return points
-    hull = []
+        return points_as_list
     
-    def find_hull(_points: List[Point], p1: Point, p2: Point) -> None:
-        if _points:
-            main_line = Line.from_two_points(p1, p2)
-            furthest_point = max(_points, key=lambda p: main_line.distance_to(p))
-            triangle = Triangle(p1, furthest_point, p2)
-            # Remove triangle and points strictly inside of it.
-            _points = [
-                p for p in _points
-                if p not in [p1, p2, furthest_point] and not triangle.strictly_contains(p)]
-            # Now we only need to consider one of p1-f or p2-f to create the partition.
-            line_1 = Line.from_two_points(p1, furthest_point)
-            s1, s2 = [], []
-            if main_line.is_strictly_below(furthest_point):
-                for p in _points:
-                    (s1 if line_1.is_strictly_below(p) or line_1.contains(p) else s2).append(p)
-            else:
-                for p in _points:
-                    (s1 if not line_1.is_strictly_below(p) else s2).append(p)
-            find_hull(s1, p1, furthest_point)
-            hull.append(furthest_point)
-            find_hull(s2, furthest_point, p2)
-    
-    min_x, max_x = min(points, key=lambda p: p.x), max(points[::-1], key=lambda p: p.x)
+    def find_hull(_points: Set[Point], p1: Point, p2: Point) -> None:
+        if not _points:
+            return
+        # Construct a triangle with the furthest point as the third vertex.
+        main_line = Line.from_two_points(p1, p2)
+        furthest_point = max(_points, key=lambda p: main_line.distance_to(p))
+        triangle = Triangle(p1, furthest_point, p2)
+        # Remove triangle and points strictly inside of it.
+        _points = {p for p in _points if not triangle.strictly_contains(p)} - {furthest_point}
+        # Now we only need to consider one of p1-fp or p2-fp to create the partition.
+        line_p1fp = Line.from_two_points(p1, furthest_point)
+        s1, s2 = set(), set()
+        if main_line.is_strictly_below(furthest_point):
+            for p in _points:
+                (s1 if line_p1fp.is_strictly_below(p) or line_p1fp.contains(p) else s2).add(p)
+        else:
+            for p in _points:
+                (s1 if not line_p1fp.is_strictly_below(p) else s2).add(p)
+        find_hull(s1, p1, furthest_point)
+        hull.append(furthest_point)
+        find_hull(s2, furthest_point, p2)
+        
+    # Find leftmost and rightmost points.
+    min_x, max_x = points_as_list[0], points_as_list[n - 1]
+    for i in range(n - 1):
+        min_x = points_as_list[i + 1] if points_as_list[i + 1].x < min_x.x else min_x
+        max_x = points_as_list[n - 2 - i] if points_as_list[n - 2 - i].x > max_x.x else max_x
+    # First line that partitions the set (in two).
     line = Line.from_two_points(min_x, max_x)
     hull.append(min_x)
-    find_hull([p for p in points if p not in [min_x, max_x] and line.is_strictly_below(p)], min_x, max_x)
+    find_hull({p for p in points if line.is_strictly_below(p)}, min_x, max_x)
     hull.append(max_x)
-    find_hull([p for p in points if p not in [min_x, max_x] and not line.is_strictly_below(p)], max_x, min_x)
+    find_hull({p for p in points if not line.is_strictly_below(p)} - {min_x, max_x}, max_x, min_x)
     return hull
 
 
-def delaunay_triangulation(points: List[Point]) -> Set[Triangle]:
+def delaunay_triangulation(points: Set[Point]) -> Set[Triangle]:
     """Compute the Delaunay triangulation of a list of points in a two-dimensional space.
     
     This function implements the Bowyer-Watson algorithm.
@@ -80,11 +85,11 @@ def delaunay_triangulation(points: List[Point]) -> Set[Triangle]:
         triangulation -= bad_triangles
         triangulation |= {Triangle(edge.p1, edge.p2, p) for edge in polygon}
     triangulation -= {
-        triangle for triangle in triangulation if triangle.shares_point(super_triangle)}
+        triangle for triangle in triangulation if triangle.shares_vertex(super_triangle)}
     return triangulation
 
 
-def voronoi_diagram(points: List[Point]) -> Tuple[Set[Segment], Set[Ray]]:
+def voronoi_diagram(points: Set[Point]) -> Tuple[Set[Segment], Set[Ray]]:
     if len(points) <= 2:
         return set(), set()
     triangles = delaunay_triangulation(points)

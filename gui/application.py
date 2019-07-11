@@ -1,7 +1,7 @@
 import tkinter as tk
 from tkinter import ttk
 from math import pi
-from geometry.plane import Point, Line, Circle, Triangle
+from geometry.plane import Point, Line, Circle
 from geometry.algorithms import convex_hull, delaunay_triangulation, voronoi_diagram
 
 
@@ -16,7 +16,7 @@ class Plane(tk.Canvas):
         OptionPanel(master=self)
         self.pack(fill=tk.BOTH, expand=tk.YES)
         self.master = master
-        self.points = []
+        self.points, self.point_ids = [], []
         self.width, self.height = self.winfo_reqwidth(), self.winfo_reqheight()
         self.cursor_text = self.create_text(*self.CURSOR_TEXT_SETTINGS)
         self.bindings()
@@ -34,13 +34,15 @@ class Plane(tk.Canvas):
         canvas_id = self.create_oval(
             x - self.POINT_RADIUS, y - self.POINT_RADIUS,
             x + self.POINT_RADIUS, y + self.POINT_RADIUS, fill='black', tags=['point', 'all'])
-        self.points.append(Point(x, self.convert_y(y), canvas_id))
+        self.points.append(Point(x, self.convert_y(y)))
+        self.point_ids.append(canvas_id)
         self.tag_raise(self.cursor_text)
         
     def remove_point(self, _event):
         if self.points:
-            self.delete(self.points[-1].canvas_id)
+            self.delete(self.point_ids[-1])
             del self.points[-1]
+            del self.point_ids[-1]
         if not self.points:
             self.master.resizable(True, True)
     
@@ -62,7 +64,7 @@ class Plane(tk.Canvas):
         self.master.resizable(True, True)
         self.delete('current_algorithm')
         self.delete('point')
-        self.points = []
+        self.points, self.point_ids = [], []
         
     def convert_y(self, y: int) -> int:
         return abs(self.master.winfo_height() - y)
@@ -138,9 +140,12 @@ class OptionPanel(tk.Toplevel):
                 intersection1 = ray_line.intersection(top_line if 0 <= angle < pi else bottom_line)
                 intersection2 = ray_line.intersection(
                     left_line if pi / 2 <= angle < 3 * pi / 2 else right_line)
-                endpoint = (intersection1
-                            if p.distance_to(intersection1) < p.distance_to(intersection2)
-                            else intersection2)
+                if intersection1 and intersection2:
+                    endpoint = (intersection1
+                                if p.distance_to(intersection1) < p.distance_to(intersection2)
+                                else intersection2)
+                else:
+                    endpoint = intersection1 or intersection2
                 self.canvas.create_line(
                     int(p.x), int(self.canvas.convert_y(p.y)),
                     int(endpoint.x), int(self.canvas.convert_y(endpoint.y)),
