@@ -7,11 +7,17 @@ from geometry.algorithms import convex_hull, delaunay_triangulation, voronoi_dia
 
 
 class Canvas(tk.Canvas):
+    """Canvas for adding or removing points on the plane."""
     
     POINT_RADIUS = 2.5
+    """The points are actually circles with this radius."""
+    
     CURSOR_TEXT_SETTINGS = (
         0, 0, {'text': '0, 0', 'anchor': 'nw', 'tag': 'all', 'font': ('Times New Roman', 18)})
+    """Coordinates text font and initial text."""
+    
     POINT_SETTINGS = {'fill': 'black', 'tags': ['point', 'all']}
+    """Change the color of the points."""
     
     def __init__(self, master=None, *args, **kwargs):
         """Initialize class attributes, bind functions, create control panel window, create text."""
@@ -25,17 +31,34 @@ class Canvas(tk.Canvas):
         self.bind('<Button-2>', self.remove_point)
         self.bind("<Configure>", self.on_resize)
         self.bind('<Motion>', self.update_cursor)
-        panel = ControlPanel(master=self)
+        self.panel = ControlPanel(master=self)
         s_width, s_height = root.winfo_screenwidth(), root.winfo_screenheight()
-        panel.geometry(f'+{5 * s_width // 8}+{s_height // 4}')
+        self.panel.geometry(f'+{5 * s_width // 8}+{s_height // 4}')
+
+    def set_resizable(self, b: bool):
+        """Enable or disable resizing."""
+        self.master.resizable(b, b)
+
+    def on_resize(self, event):
+        """Scale points, lines, and/or polygons."""
+        # Point information is effectively lost if there's been a resizing and an execution.
+        if self.panel.algorithm_executed:
+            self.panel.disable()
+        # Determine the ratio of old width/height to new width/height.
+        wscale = event.width / self.width
+        hscale = event.height / self.height
+        self.width, self.height = event.width, event.height
+        # Resize the canvas.
+        self.config(width=self.width, height=self.height)
+        # Rescale all the objects tagged with the "all" tag.
+        self.scale("all", 0, 0, wscale, hscale)
     
     def add_point(self, event):
         """Draw a point and save the object and its returned ID.
         
         If it's the first point added, this method disables window resizing.
         """
-        if not self.points:
-            self.master.resizable(False, False)
+        self.set_resizable(False)
         x, y = event.x, event.y
         canvas_id = self.create_oval(
             x - self.POINT_RADIUS, y - self.POINT_RADIUS,
@@ -55,26 +78,16 @@ class Canvas(tk.Canvas):
             del self.points[-1]
             del self.point_ids[-1]
         if not self.points:
-            self.master.resizable(True, True)
-    
-    def on_resize(self, event):
-        """Scale points, lines, polygons"""
-        # Determine the ratio of old width/height to new width/height.
-        wscale = event.width / self.width
-        hscale = event.height / self.height
-        self.width, self.height = event.width, event.height
-        # Resize the canvas.
-        self.config(width=self.width, height=self.height)
-        # Rescale all the objects tagged with the "all" tag.
-        self.scale("all", 0, 0, wscale, hscale)
-    
+            self.set_resizable(True)
+            self.panel.algorithm_executed = False  # Permit executions.
+            
     def update_cursor(self, event):
         """Update the coordinates shown at the top left part of the canvas."""
         self.itemconfigure(self.cursor_text, text=f'{event.x}, {self.convert_ordinate(event.y)}')
     
     def clear(self):
         """Delete everything on the canvas except the coordinates, and enable resizing."""
-        self.master.resizable(True, True)
+        self.set_resizable(True)
         self.delete('current_algorithm')
         self.delete('point')
         self.points, self.point_ids = [], []
@@ -84,48 +97,83 @@ class Canvas(tk.Canvas):
         return self.master.winfo_height() - y
 
     def create_line(self, p1: Point, p2: Point, *args, **kwargs) -> int:
+        """Create a line more easily given two point objects."""
         return super().create_line(int(p1.x), int(self.convert_ordinate(p1.y)),
                                    int(p2.x), int(self.convert_ordinate(p2.y)), *args, **kwargs)
 
     def create_triangle(self, triangle: Triangle, *args, **kwargs) -> int:
+        """Create a triangle more easily given a triangle object."""
         p1, p2, p3 = triangle.p1, triangle.p2, triangle.p3
         return self.create_polygon(
             *[(int(p.x), int(self.convert_ordinate(p.y))) for p in [p1, p2, p3]], *args, **kwargs)
     
     def create_circle(self, circle: Circle, *args, **kwargs) -> int:
+        """Create a circle more easily given a circle object."""
         h, k, r = int(circle.h), int(circle.k), int(circle.r)
         return self.create_oval(int(h - r), int(self.convert_ordinate(k + r)),
                                 int(h + r), int(self.convert_ordinate(k - r)), *args, **kwargs)
     
 
 class ControlPanel(tk.Toplevel):
+    """Panel for selecting an algorithm, clearing the canvas, or exiting the program."""
+    
+    LABEL_TEXT = (
+        'Suggestion: Try not to add three or more collinear\n'
+        'points. Also, it\'s easier to resize the canvas with\n'
+        'the top corners than the bottom ones.\n'
+        'Note: You cannot resize the canvas after a point\n'
+        'has been added unless an algorithm has been executed,\n'
+        'then you can resize only until you add another point.')
+    """Suggestions."""
     
     ALGORITHM_NAMES = [
         'Select an algorithm...', 'Convex Hull', 'Delaunay triangulation',
         'Delaunay triangulation with circumcircles', 'Voronoi Diagram']
+    """All options."""
+    
     CONVEX_HULL_SETTINGS = {
         'fill': '#DDDDDD', 'tags': ['current_algorithm', 'all']}
+    """Convex polygon fill color."""
+    
     TRIANGLE_SETTINGS = {
         'outline': '#000000', 'fill': '#FFFFFF', 'tags': ['current_algorithm', 'all']}
+    """Triangle outlines and fills."""
+    
     CIRCLE_SETTINGS = {
         'outline': '#FF0000', 'tags': ['circle', 'current_algorithm', 'all']}
+    """Circle outlines and fills."""
     
     def __init__(self, master=None, *args, **kwargs):
+        """Create combobox and buttons."""
         super().__init__(master, *args, **kwargs)
         self.canvas = master
+        self.algorithm_executed = False
         self.wm_title('Control panel')
         self.protocol('WM_DELETE_WINDOW', lambda: self.canvas.master.destroy())
+        label = tk.Label(self, text=self.LABEL_TEXT, justify=tk.LEFT)
+        label.pack(side=tk.TOP, expand=tk.YES)
         self.algorithm_combobox = ttk.Combobox(self, values=self.ALGORITHM_NAMES)
         self.algorithm_combobox.bind("<<ComboboxSelected>>", self.execute_algorithm)
         self.algorithm_combobox.config(state='readonly', width='30')
         self.algorithm_combobox.current(0)
-        self.algorithm_combobox.pack(side='top', fill=tk.X)
-        tk.Button(self, text='Clear', command=self.clear).pack(side='top')
+        self.algorithm_combobox.pack(side=tk.TOP, fill=tk.X)
+        self.update_button = tk.Button(
+            self, text='Update', command=lambda: self.execute_algorithm(0))
+        self.update_button.pack(side=tk.TOP)
+        tk.Button(self, text='Clear', command=self.clear).pack(side=tk.TOP)
         tk.Button(self, text='Quit', command=lambda: self.canvas.master.destroy()).pack(side='top')
     
+    def disable(self):
+        """Prevent further execution of the algorithms."""
+        self.algorithm_combobox.config(state='disabled')
+        self.update_button.config(state='disabled')
+    
     def clear(self):
-        """Reset combobox and clear canvas."""
+        """Reset combobox, clear canvas, and permit algorithm executions."""
+        self.algorithm_executed = False
+        self.algorithm_combobox.config(state='readonly')
         self.algorithm_combobox.set(self.ALGORITHM_NAMES[0])
+        self.update_button.config(state='normal')
         self.canvas.clear()
     
     def execute_algorithm(self, _event):
@@ -177,11 +225,13 @@ class ControlPanel(tk.Toplevel):
                     endpoint = intersection1 or intersection2
                 self.canvas.create_line(p, endpoint, tags=['current_algorithm', 'all'])
         self.canvas.tag_lower('current_algorithm')
+        self.canvas.set_resizable(True)
+        self.algorithm_executed = True
 
 
 if __name__ == '__main__':
     root = tk.Tk()
-    root.wm_title('Computational geometry')
+    root.wm_title('Plane')
     screen_width, screen_height = root.winfo_screenwidth(), root.winfo_screenheight()
     root.geometry(f'{screen_width // 2}x{screen_height // 2}'
                   f'+{screen_width // 8}+{screen_height // 4}')
