@@ -4,7 +4,7 @@ from geometry.plane import Point, Segment, Ray, Triangle, Line, Circle
 
 
 def convex_hull(points: Set[Point]) -> List[Point]:
-    """Compute the convex hull of a list of points in a two-dimensional space.
+    """Compute the convex hull of a set of points in a two-dimensional space.
 
     This function implements the Quickhull algorithm.
     Reference: https://en.wikipedia.org/wiki/Quickhull#Algorithm.
@@ -50,7 +50,7 @@ def convex_hull(points: Set[Point]) -> List[Point]:
 
 
 def delaunay_triangulation(points: Set[Point]) -> Set[Triangle]:
-    """Compute the Delaunay triangulation of a list of points in a two-dimensional space.
+    """Compute the Delaunay triangulation of a set of points in a two-dimensional space.
     
     This function implements the Bowyer-Watson algorithm.
     Reference: https://en.wikipedia.org/wiki/Bowyer-Watson_algorithm.
@@ -90,6 +90,14 @@ def delaunay_triangulation(points: Set[Point]) -> Set[Triangle]:
 
 
 def voronoi_diagram(points: Set[Point]) -> Tuple[Set[Segment], Set[Ray]]:
+    """Compute the Voronoi diagram for a set of points in a two-dimensional space.
+    
+    The diagram is represented as a set of line segments and a set of rays.
+    This function constructs the dual graph of the Delaunay triangulation, therefore there are two
+    cases where it can fail to return a valid Voronoi diagram:
+      - If there are three or more collinear points, there is possibly no triangulation.
+      - If there are four or more cocircular points, the triangulation is ambiguous.
+    """
     if len(points) <= 2:
         return set(), set()
     triangles = delaunay_triangulation(points)
